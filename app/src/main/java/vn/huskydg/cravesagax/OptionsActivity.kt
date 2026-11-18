@@ -28,13 +28,13 @@ class OptionsActivity : AppCompatActivity() {
 
         webView = WebView(this)
         WebSetup.configure(webView, hideWebViewUa = false)
-        webView.setBackgroundColor(0xFFF9F9FB.toInt())
+        webView.setBackgroundColor(0xFF0F1220.toInt())
         webView.webViewClient = PanelClient(this, WebSetup.assetLoader(this))
         webView.webChromeClient = AppChromeClient(this, chooser)
         WebSetup.installPanel(webView, this)
 
         val root = FrameLayout(this)
-        root.setBackgroundColor(0xFFF9F9FB.toInt())
+        root.setBackgroundColor(0xFF0F1220.toInt())
         root.addView(webView, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         setContentView(root)
         ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->

@@ -73,7 +73,7 @@ class GameActivity : AppCompatActivity() {
         // ---- WebView menu phải (popup.html của extension) ----
         panelView = WebView(this)
         WebSetup.configure(panelView, hideWebViewUa = false)
-        panelView.setBackgroundColor(0xFFF9F9FB.toInt())
+        panelView.setBackgroundColor(0xFF0F1220.toInt())
         panelView.webViewClient = PanelClient(this, WebSetup.assetLoader(this))
         panelView.webChromeClient = AppChromeClient(this, chooser)
         WebSetup.installPanel(panelView, this)
@@ -98,7 +98,7 @@ class GameActivity : AppCompatActivity() {
 
         drawer = DrawerLayout(this)
         drawer.addView(content, DrawerLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-        val panelWidth = minOf(dp(380), (resources.displayMetrics.widthPixels * 0.9f).toInt())
+        val panelWidth = minOf(dp(440), (resources.displayMetrics.widthPixels * 0.92f).toInt())
         drawer.addView(panelView, DrawerLayout.LayoutParams(panelWidth, ViewGroup.LayoutParams.MATCH_PARENT, Gravity.END))
         drawer.setDrawerLockMode(DrawerLayout.LOCK_MODE_LOCKED_CLOSED)
         drawer.addDrawerListener(object : DrawerLayout.SimpleDrawerListener() {

@@ -78,6 +78,9 @@ object WebSetup {
 
     /** Gắn cầu nối + shim cho WebView hiển thị popup.html / options.html của extension. */
     fun installPanel(wv: WebView, ctx: Context) {
+        // popup.html/options.html không có <meta viewport> -> WebView mặc định dựng layout rộng 980px rồi thu nhỏ (chữ rất bé).
+        wv.settings.useWideViewPort = false
+        wv.settings.loadWithOverviewMode = false
         val origins = setOf(Injector.EXT_ORIGIN)
         ExtensionHub.attach(wv, ExtensionHub.Kind.PANEL, origins)
         WebViewCompat.addDocumentStartJavaScript(wv, Injector.panelScript(ctx), origins)
