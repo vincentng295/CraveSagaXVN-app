@@ -12,6 +12,9 @@ object Injector {
     const val EXT_ORIGIN = "https://appassets.androidplatform.net"
     const val EXT_BASE = "$EXT_ORIGIN/assets/ext/"
 
+    const val AISTUDIO_ORIGIN = "https://aistudio.google.com"
+    val AISTUDIO_ORIGINS: Set<String> = setOf(AISTUDIO_ORIGIN)
+
     /** Origin cho addWebMessageListener / addDocumentStartJavaScript (khớp "matches" của manifest). */
     val CONTENT_ORIGINS: Set<String> = setOf(
         "https://gi.nutaku.com",
@@ -55,6 +58,28 @@ object Injector {
             append("})();\n")
         }
         gameCache = script
+        return script
+    }
+
+    private var aiStudioCache: String? = null
+
+    /**
+     * Mini trình duyệt Google AI Studio: get-api-key.js (hook XHR ListCloudApiKeys) + get-api-key-bridge.js
+     * (chép nguyên văn từ extension; bridge dùng chrome.storage.local của lớp shim).
+     */
+    @Synchronized
+    fun aiStudioScript(ctx: Context): String {
+        aiStudioCache?.let { return it }
+        val script = buildString {
+            append("(function(){\n")
+            append("if(!window.CraveBridge)return;\n")
+            append(asset(ctx, "inject/chrome-shim.js")).append("\n")
+            append("var __chrome=__createCraveChrome({panel:false});\n")
+            append("(function(chrome){\n").append(asset(ctx, "inject/get-api-key-bridge.js")).append("\n})(__chrome);\n")
+            append("})();\n")
+            append("(function(){\n").append(asset(ctx, "inject/get-api-key.js")).append("\n})();\n")
+        }
+        aiStudioCache = script
         return script
     }
 

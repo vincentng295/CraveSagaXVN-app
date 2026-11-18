@@ -171,6 +171,9 @@ object ExtensionHub {
     /** Phát chrome.storage.onChanged tới mọi frame/trang (kể cả bên vừa ghi, giống Chrome). */
     private fun announce(changed: Map<String, String?>) {
         if (changed.isEmpty()) return
+        changed["fetchedApiKeys"]?.let { json ->
+            main.post { (host as? AiStudioActivity)?.onKeysFetched(json) }
+        }
         val sb = StringBuilder("{\"t\":\"changed\",\"changes\":{")
         var first = true
         for ((k, v) in changed) {
@@ -208,6 +211,9 @@ object ExtensionHub {
             when {
                 url.startsWith(Injector.EXT_BASE + "options.html") ->
                     act.startActivity(Intent(act, OptionsActivity::class.java))
+                // Lấy API key: mở mini trình duyệt Google AI Studio ngay trong app.
+                url.startsWith(Injector.AISTUDIO_ORIGIN + "/") ->
+                    act.startActivity(Intent(act, AiStudioActivity::class.java).putExtra(AiStudioActivity.EXTRA_URL, url))
                 url.startsWith("http://") || url.startsWith("https://") ->
                     try { act.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) } catch (e: Exception) {
                         Toast.makeText(act, "Không mở được liên kết", Toast.LENGTH_SHORT).show()

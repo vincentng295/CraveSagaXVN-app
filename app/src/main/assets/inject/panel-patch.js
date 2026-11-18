@@ -1,6 +1,7 @@
 // Chạy trong WebView của menu bên phải (popup.html) và trang Options (options.html).
 // Không sửa file gốc của extension: mọi chỉnh sửa giao diện làm ở đây.
 (function () {
+    // ---- Luôn dùng giao diện tối (bỏ nền sáng + nút đổi Sáng/Tối) ----
     var root = document.documentElement;
     function forceDark() {
         if (root.getAttribute('data-theme') !== 'dark') root.setAttribute('data-theme', 'dark');

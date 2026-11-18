@@ -18,6 +18,7 @@ import android.widget.EditText
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
+import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
@@ -62,6 +63,13 @@ object WebSetup {
         val cm = CookieManager.getInstance()
         cm.setAcceptCookie(true)
         cm.setAcceptThirdPartyCookies(wv, true)
+    }
+
+    /** Bỏ header X-Requested-With (chứa package của app) – Google dùng nó để nhận ra WebView khi đăng nhập. */
+    fun hideRequestedWithHeader(wv: WebView) {
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.REQUESTED_WITH_HEADER_ALLOW_LIST)) {
+            WebSettingsCompat.setRequestedWithHeaderOriginAllowList(wv.settings, emptySet())
+        }
     }
 
     fun assetLoader(ctx: Context): WebViewAssetLoader =
@@ -156,7 +164,7 @@ class FileChooserHelper(activity: ComponentActivity) {
 }
 
 /** alert()/confirm()/prompt() mặc định bị WebView bỏ qua nên phải tự hiện hộp thoại. */
-class AppChromeClient(
+open class AppChromeClient(
     private val activity: Activity,
     private val chooser: FileChooserHelper
 ) : WebChromeClient() {
