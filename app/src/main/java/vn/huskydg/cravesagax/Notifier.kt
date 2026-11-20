@@ -2,6 +2,7 @@ package vn.huskydg.cravesagax
 
 import android.Manifest
 import android.app.Activity
+import android.app.AlertDialog
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -42,6 +43,43 @@ object Notifier {
         if (ContextCompat.checkSelfPermission(activity, Manifest.permission.POST_NOTIFICATIONS) ==
             PackageManager.PERMISSION_GRANTED) return
         ActivityCompat.requestPermissions(activity, arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQ_PERMISSION)
+    }
+
+    @Volatile private var noticeDialog: AlertDialog? = null
+
+    /**
+     * Popup báo cho người dùng biết việc dịch Gemma đang chạy nền: có thể thoát trang / chuyển app
+     * khác / đóng app, tiến độ xem ở thanh thông báo. Gọi trên luồng chính, bằng Activity đang hiện.
+     */
+    fun showBackgroundNotice(act: Activity) {
+        if (act.isFinishing || act.isDestroyed) return
+        try { noticeDialog?.dismiss() } catch (_: Exception) {}
+
+        val notifyOk = canNotify(act)
+        val msg = StringBuilder()
+            .append("Gemma đang dịch trong nền. Bạn có thể thoát trang này, chuyển sang ứng dụng khác ")
+            .append("hoặc đóng app để làm việc khác — việc dịch vẫn tiếp tục.\n\n")
+            .append("Các câu đã dịch được lưu dần vào từ điển. ")
+            .append(if (notifyOk) "Xem tiến độ ở thanh thông báo; app sẽ báo khi dịch xong hoặc gặp lỗi."
+                    else "Hãy bật thông báo cho app để xem tiến độ và nhận kết quả khi dịch xong.")
+            .toString()
+
+        noticeDialog = AlertDialog.Builder(act, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("Đang dịch trong nền")
+            .setMessage(msg)
+            .setCancelable(true)
+            .setPositiveButton("Đã hiểu", null)
+            .setNegativeButton("Dừng dịch") { _, _ -> GemmaJob.cancel(null) }
+            .create()
+            .also { d ->
+                d.setOnDismissListener { if (noticeDialog === d) noticeDialog = null }
+                try { d.show() } catch (_: Exception) {}
+            }
+    }
+
+    /** Gỡ popup (vd: lượt dịch đã kết thúc trong lúc popup còn hiện). */
+    fun dismissBackgroundNotice() {
+        main.post { try { noticeDialog?.dismiss() } catch (_: Exception) {} }
     }
 
     private fun canNotify(ctx: Context): Boolean {

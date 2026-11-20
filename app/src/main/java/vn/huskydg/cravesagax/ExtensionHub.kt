@@ -159,10 +159,12 @@ object ExtensionHub {
         }
         val apiKey = m.optString("apiKey")
         if (apiKey.isBlank()) return
-        GemmaJob.start(
+        val launched = GemmaJob.start(
             appContext, apiKey, m.optString("model"), m.optString("instruction"),
             items, m.optString("chapLabel")
         )
+        // Lượt dịch mới bắt đầu -> popup báo đang dịch nền, người dùng có thể thoát ra làm việc khác.
+        if (launched) main.post { host?.let { Notifier.showBackgroundNotice(it) } }
     }
 
     /** Gửi 1 message tới các trang menu/Options đang mở (chrome.runtime.onMessage phía JS). */

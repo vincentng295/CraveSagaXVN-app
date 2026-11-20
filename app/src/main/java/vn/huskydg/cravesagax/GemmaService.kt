@@ -244,6 +244,7 @@ object GemmaJob {
     }
 
     private fun finish(ctx: Context, finalState: String, items: List<Item>, error: String?) {
+        Notifier.dismissBackgroundNotice()
         val remaining = items.drop(processed).map { it.key }
         lastRemaining = if (finalState == "done") emptyList() else remaining
         state = finalState
