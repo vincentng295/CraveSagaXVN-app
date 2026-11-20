@@ -24,6 +24,10 @@ import androidx.core.view.WindowInsetsCompat
 /** Màn hình đầu tiên: chọn phiên bản game. */
 class MainActivity : AppCompatActivity() {
 
+    private companion object {
+        const val WARP_LITE_URL = "https://vincentng295.github.io/WARPLite-Android/"
+    }
+
     private lateinit var batteryButton: TextView
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density + 0.5f).toInt()
@@ -74,6 +78,29 @@ class MainActivity : AppCompatActivity() {
             }
         )
         refreshBatteryButton()
+
+        // Quảng bá WARP Lite: tăng tốc truy cập web khi mạng lag
+        val promo = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(14), dp(16), dp(14))
+            background = rounded(0xFF3A2414.toInt(), 12).apply { setStroke(dp(1), 0xFFFF8A3D.toInt()) }
+            isClickable = true
+            isFocusable = true
+            setOnClickListener {
+                try {
+                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(WARP_LITE_URL)))
+                } catch (e: Exception) {
+                    Toast.makeText(this@MainActivity, "Không mở được trình duyệt", Toast.LENGTH_SHORT).show()
+                }
+            }
+            addView(text("🚀 Mạng lag? Tải app WARP Lite", 14f, 0xFFFF8A3D.toInt(), bold = true))
+            addView(text("Tải app WARP Lite để tăng tốc độ truy cập web nếu mạng lag. Miễn phí, không cần tài khoản — chạm để tải APK.", 12f, 0xFFE5C9B0.toInt()).apply {
+                setPadding(0, dp(4), 0, 0)
+            })
+        }
+        column.addView(promo, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ).apply { topMargin = dp(16) })
 
         column.addView(
             text("Việt hóa tự động hội thoại • mã nguồn mở, miễn phí • v${Updater.current(this).name}", 11f, 0xFF7C819A.toInt()).apply {

@@ -9,6 +9,10 @@ Crave Saga X Tiếng Việt Cho Android
 - **Dịch Gemma chạy nền:** nút "Dịch lại bằng Gemma" trong Quản lý từ điển chạy bằng foreground service native, có thông báo tiến độ (nút Dừng) và thông báo kết quả/lỗi; vẫn tiếp tục khi thoát trang, thoát game hoặc đóng app.
 - Màn hình chọn game có nút **Bỏ qua tối ưu hóa pin** để Android không ngắt việc dịch nền.
 
+## Mạng lag?
+
+Tải app **[WARP Lite](https://vincentng295.github.io/WARPLite-Android/)** để tăng tốc độ truy cập web nếu mạng lag (miễn phí, không cần tài khoản). App cũng hiện lời nhắc này ở màn hình chọn game.
+
 ## Build APK
 
 **Cách 1 – GitHub Actions (không cần cài gì):** push project lên GitHub, workflow `Build APK` sẽ tạo `CraveSagaX_VN.apk`

@@ -325,6 +325,22 @@
     font-family:'JetBrains Mono',monospace;
   }
 
+  /* ---------- WARP PROMO ---------- */
+  .warp{
+    display:grid;grid-template-columns:1fr auto;gap:40px;align-items:center;
+    border:1px solid rgba(255,138,61,0.4);border-radius:2px;
+    background:linear-gradient(120deg, rgba(255,138,61,0.12), rgba(255,138,61,0.02));
+    padding:40px 44px;
+  }
+  .warp h2{margin:16px 0 14px;font-size:clamp(1.4rem,2.4vw,2rem);}
+  .warp p{color:var(--ink-dim);line-height:1.8;font-size:0.98rem;max-width:52ch;}
+  .warp .btn-warp{
+    display:inline-block;padding:14px 26px;border-radius:999px;text-decoration:none;
+    background:#ff8a3d;color:#1a0f08;font-weight:700;font-size:0.92rem;white-space:nowrap;
+    transition:transform .25s ease, background .25s ease;
+  }
+  .warp .btn-warp:hover,.warp .btn-warp:focus-visible{background:#ffa062;transform:translateY(-2px);}
+
   /* ---------- DONATE ---------- */
   .donate{
     display:grid;grid-template-columns:1fr auto;gap:70px;align-items:center;
@@ -363,6 +379,7 @@
     .safety{grid-template-columns:1fr;padding:30px 26px;}
     .play-grid{grid-template-columns:1fr;}
     .donate{grid-template-columns:1fr;gap:36px;}
+    .warp{grid-template-columns:1fr;padding:30px 26px;gap:24px;}
     .qr-wrap{justify-self:start;}
     footer{padding:32px 24px;flex-direction:column;align-items:flex-start;}
     .hero{padding:0 24px;}
@@ -567,6 +584,17 @@
       <div class="purl">play.games.dmm.co.jp/game/cravesagax</div>
       <span class="arrow">Chơi ngay →</span>
     </a>
+  </div>
+</section>
+
+<section id="warp">
+  <div class="warp">
+    <div>
+      <span class="eyebrow">Mạng lag?</span>
+      <h2>Tải app WARP Lite để tăng tốc độ truy cập web</h2>
+      <p>Nếu mạng nhà bạn lag, vào game hay tải trang chậm, hãy thử <strong>1.1.1.1 WARP Lite</strong> — app Android miễn phí, nhẹ, không cần tài khoản, giúp truy cập web nhanh và riêng tư hơn chỉ với một chạm.</p>
+    </div>
+    <a class="btn-warp" href="https://vincentng295.github.io/WARPLite-Android/" target="_blank" rel="noopener">Tải WARP Lite →</a>
   </div>
 </section>
 
