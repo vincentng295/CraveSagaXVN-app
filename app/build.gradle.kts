@@ -51,8 +51,10 @@ android {
         applicationId = "vn.huskydg.cravesagax"
         minSdk = 24
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.10"
+        // CI truyền VERSION_CODE (= số commit) để mỗi bản build có versionCode tăng dần; build local dùng 1.
+        val ciVersionCode = System.getenv("VERSION_CODE")?.toIntOrNull()
+        versionCode = ciVersionCode ?: 1
+        versionName = if (ciVersionCode != null) "1.10.$ciVersionCode" else "1.10"
     }
 
     signingConfigs {

@@ -1,0 +1,110 @@
+name: Release APK
+
+# Chạy tay (Actions -> Release APK -> Run workflow) để phát hành bản chính thức vào tag `apk-release`:
+#   CraveSagaX_VN.apk, version.json (thông tin phiên bản) và changelog.md (nội dung cập nhật).
+# App đọc version.json này để báo có bản mới và hiện changelog.md.
+on:
+  workflow_dispatch:
+    inputs:
+      changelog:
+        description: 'Nội dung cập nhật bản mới (gõ \n để xuống dòng, vd: "- Sửa lỗi A\n- Thêm B")'
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Accept Android SDK licenses
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Ghi MV2R_KEYSTORE.env từ secret
+        env:
+          MV2R_KEYSTORE_ENV: ${{ secrets.MV2R_KEYSTORE_ENV }}
+        run: |
+          if [ -n "$MV2R_KEYSTORE_ENV" ]; then
+            printf '%s\n' "$MV2R_KEYSTORE_ENV" > MV2R_KEYSTORE.env
+            echo "Đã ghi MV2R_KEYSTORE.env từ secret MV2R_KEYSTORE_ENV."
+          else
+            echo "::warning::Không có secret MV2R_KEYSTORE_ENV -> APK ký bằng khóa debug, người dùng sẽ không cập nhật đè được lên bản ký bằng khóa khác."
+          fi
+
+      - name: Tính phiên bản
+        run: |
+          CODE="$(git rev-list --count HEAD)"
+          echo "VERSION_CODE=$CODE" >> "$GITHUB_ENV"
+          echo "VERSION_NAME=1.10.$CODE" >> "$GITHUB_ENV"
+          echo "SHORT_SHA=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_ENV"
+
+      - name: Build release APK
+        run: gradle :app:assembleRelease --no-daemon
+
+      - name: Tạo APK, version.json, changelog.md
+        env:
+          CHANGELOG_INPUT: ${{ inputs.changelog }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          cp app/build/outputs/apk/release/app-release.apk out/CraveSagaX_VN.apk
+
+          # changelog: đổi chuỗi "\n" gõ trong ô nhập thành xuống dòng thật
+          if [ -n "${CHANGELOG_INPUT//[[:space:]]/}" ]; then
+            printf '%s\n' "$CHANGELOG_INPUT" | sed 's/\\n/\n/g' > out/changelog.md
+          else
+            printf 'Build từ commit %s\n' "$SHORT_SHA" > out/changelog.md
+          fi
+
+          BASE="https://github.com/${REPO}/releases/download/apk-release"
+          jq -n \
+            --argjson versionCode "$VERSION_CODE" \
+            --arg versionName "$VERSION_NAME" \
+            --arg commit "$SHA" \
+            --arg shortCommit "$SHORT_SHA" \
+            --arg buildDate "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg apkUrl "$BASE/CraveSagaX_VN.apk" \
+            --argjson apkSize "$(stat -c%s out/CraveSagaX_VN.apk)" \
+            --arg sha256 "$(sha256sum out/CraveSagaX_VN.apk | cut -d' ' -f1)" \
+            --arg changelogUrl "$BASE/changelog.md" \
+            '{versionCode:$versionCode, versionName:$versionName, commit:$commit, shortCommit:$shortCommit,
+              buildDate:$buildDate, apkUrl:$apkUrl, apkSize:$apkSize, sha256:$sha256, changelogUrl:$changelogUrl}' \
+            > out/version.json
+          cat out/version.json
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CraveSagaX_VN-release
+          path: out/*
+
+      - name: Publish release apk-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete apk-release --yes --cleanup-tag || echo "Chưa có release 'apk-release', bỏ qua."
+          gh release create apk-release out/CraveSagaX_VN.apk out/version.json out/changelog.md \
+            --target "$GITHUB_SHA" \
+            --title "CraveSagaX VN $VERSION_NAME" \
+            --notes "Build từ commit $SHORT_SHA" \
+            --latest

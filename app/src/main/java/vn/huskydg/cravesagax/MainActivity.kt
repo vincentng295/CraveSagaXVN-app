@@ -54,7 +54,7 @@ class MainActivity : AppCompatActivity() {
         ).apply { topMargin = dp(14) })
 
         column.addView(
-            text("Việt hóa tự động hội thoại • mã nguồn mở, miễn phí", 11f, 0xFF7C819A.toInt()).apply {
+            text("Việt hóa tự động hội thoại • mã nguồn mở, miễn phí • v${Updater.current(this).name}", 11f, 0xFF7C819A.toInt()).apply {
                 gravity = Gravity.CENTER
                 setPadding(0, dp(18), 0, 0)
             }
@@ -72,6 +72,8 @@ class MainActivity : AppCompatActivity() {
             v.setPadding(bars.left, bars.top, bars.right, bars.bottom)
             insets
         }
+
+        UpdateDialog.check(this) // có bản mới trên GitHub Release thì hiện nội dung cập nhật + nút tải
     }
 
     override fun onResume() {
