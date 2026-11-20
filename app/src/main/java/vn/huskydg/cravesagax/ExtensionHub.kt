@@ -134,6 +134,7 @@ object ExtensionHub {
             }
             "open" -> openUrl(m.optString("url"))
             "app" -> handleAppAction(m.optString("action"))
+            "notify" -> Notifier.show(appContext, m.optString("kind"), m.optString("text"))
             "fbegin" -> fileBegin(m.getInt("id"), m.optString("name"), m.optString("mime"))
             "fchunk" -> fileChunk(m.getInt("id"), m.getString("d"))
             "fend" -> fileEnd(m.getInt("id"))

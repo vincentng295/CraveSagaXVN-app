@@ -86,107 +86,38 @@ function mark(fn, nativeSrc) {
 }
 
 /**
- * ==== Toast báo trạng thái đang dịch bằng Gemma ====
- * Chèn 1 overlay nhỏ đè lên canvas Cocos để người chơi biết đang gọi AI dịch theo lô.
+ * ==== Thông báo của app Android (thay cho toast vẽ đè lên canvas) ====
+ * Gửi APP_NOTIFY -> content.js -> CraveBridge -> Notifier.kt.
+ * kind: 'progress' (đang dịch, có thanh chạy) | 'done' | 'error' | 'clear'
  */
-const GEMMA_TOAST_ID = '__gemma_translate_toast__';
 let gemmaToastActiveCount = 0;
 
-function ensureGemmaToastEl() {
-    let el = document.getElementById(GEMMA_TOAST_ID);
-    if (el) return el;
-
-    el = document.createElement('div');
-    el.id = GEMMA_TOAST_ID;
-    el.style.cssText = [
-        'position:fixed', 'top:12px', 'right:12px', 'z-index:2147483647',
-        'display:none', 'align-items:center', 'gap:8px',
-        'background:rgba(17,24,39,0.9)', 'color:#fff',
-        'font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif',
-        'font-size:13px', 'font-weight:600', 'padding:8px 14px',
-        'border-radius:999px', 'box-shadow:0 4px 12px rgba(0,0,0,0.35)',
-        'pointer-events:none', 'transition:opacity .2s'
-    ].join(';');
-
-    const spinner = document.createElement('div');
-    spinner.style.cssText = [
-        'width:14px', 'height:14px', 'border-radius:50%',
-        'border:2px solid rgba(255,255,255,0.35)', 'border-top-color:#fff',
-        'animation:__gemma_spin__ .7s linear infinite', 'flex-shrink:0'
-    ].join(';');
-
-    const styleTag = document.createElement('style');
-    styleTag.textContent = '@keyframes __gemma_spin__{to{transform:rotate(360deg)}}';
-    document.head.appendChild(styleTag);
-
-    const label = document.createElement('span');
-    label.id = GEMMA_TOAST_ID + '_label';
-    label.textContent = 'Đang dịch bằng Gemma...';
-
-    el.appendChild(spinner);
-    el.appendChild(label);
-    document.body.appendChild(el);
-    return el;
+function notifyApp(kind, text) {
+    sendToExtension({ type: 'APP_NOTIFY', kind, text: text || '' });
 }
 
 function showGemmaToast(text) {
     gemmaToastActiveCount++;
-    const el = ensureGemmaToastEl();
-    const label = document.getElementById(GEMMA_TOAST_ID + '_label');
-    if (label) label.textContent = text || 'Đang dịch bằng Gemma...';
-    el.style.display = 'flex';
-    el.style.opacity = '1';
+    notifyApp('progress', text || 'Đang dịch bằng Gemma...');
+}
+
+// Cập nhật nội dung thông báo đang hiện (vd: đang chờ thử lại 429) mà không tăng bộ đếm.
+function updateGemmaToast(text) {
+    notifyApp('progress', text || 'Đang dịch bằng Gemma...');
 }
 
 function hideGemmaToast() {
     gemmaToastActiveCount = Math.max(0, gemmaToastActiveCount - 1);
     if (gemmaToastActiveCount > 0) return;
-    const el = document.getElementById(GEMMA_TOAST_ID);
-    if (!el) return;
-    el.style.opacity = '0';
-    setTimeout(() => {
-        if (gemmaToastActiveCount === 0) el.style.display = 'none';
-    }, 200);
+    notifyApp('clear');
 }
 
-/**
- * ==== Toast báo lỗi Gemma + fallback về Google Dịch ====
- * Hiện riêng biệt với toast loading ở trên (màu đỏ, nằm ngay dưới), tự ẩn sau vài giây.
- */
-const GEMMA_ERROR_TOAST_ID = '__gemma_error_toast__';
-let gemmaErrorToastHideTimeoutId = null;
-
-function ensureGemmaErrorToastEl() {
-    let el = document.getElementById(GEMMA_ERROR_TOAST_ID);
-    if (el) return el;
-
-    el = document.createElement('div');
-    el.id = GEMMA_ERROR_TOAST_ID;
-    el.style.cssText = [
-        'position:fixed', 'top:52px', 'right:12px', 'z-index:2147483647',
-        'max-width:320px',
-        'display:none', 'align-items:flex-start', 'gap:8px',
-        'background:rgba(220,38,38,0.95)', 'color:#fff',
-        'font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif',
-        'font-size:12px', 'font-weight:600', 'line-height:1.45', 'padding:10px 14px',
-        'border-radius:10px', 'box-shadow:0 4px 12px rgba(0,0,0,0.35)',
-        'pointer-events:none', 'transition:opacity .2s'
-    ].join(';');
-    document.body.appendChild(el);
-    return el;
+function showGemmaDoneToast(text) {
+    notifyApp('done', text);
 }
 
-function showGemmaErrorToast(text, durationMs = 6000) {
-    const el = ensureGemmaErrorToastEl();
-    el.textContent = `⚠️ ${text}`;
-    el.style.display = 'flex';
-    el.style.opacity = '1';
-
-    if (gemmaErrorToastHideTimeoutId) clearTimeout(gemmaErrorToastHideTimeoutId);
-    gemmaErrorToastHideTimeoutId = setTimeout(() => {
-        el.style.opacity = '0';
-        setTimeout(() => { el.style.display = 'none'; }, 200);
-    }, durationMs);
+function showGemmaErrorToast(text) {
+    notifyApp('error', text);
 }
 
 // Rút gọn message lỗi trả về từ Gemini API (thường là JSON {"error":{"message":"..."}})
@@ -344,7 +275,7 @@ function requestGemmaBatchFromContentScript(contents) {
             // toast, KHÔNG resolve/reject vì kết quả thật vẫn chưa về.
             if (event.data.type === 'GEMMA_BATCH_RETRY') {
                 const secs = Math.round((event.data.delayMs || 30000) / 1000);
-                showGemmaToast(`Gemma bị giới hạn quota (429), thử lại sau ${secs}s (lần ${event.data.attempt}/${event.data.max})...`);
+                updateGemmaToast(`Gemma bị giới hạn quota (429), thử lại sau ${secs}s (lần ${event.data.attempt}/${event.data.max})...`);
                 return;
             }
 
@@ -1370,10 +1301,11 @@ onExtensionMessage((event) => {
             try {
                 const map = await callGemmaBatch(uniqueItems);
                 hideGemmaToast();
-                alert('Dịch hoàn tất! Mời bạn thưởng thức câu chuyện.');
+                showGemmaDoneToast('Dịch hoàn tất! Mời bạn thưởng thức câu chuyện.');
                 return new Map(Object.entries(map));
             } catch (err) {
                 hideGemmaToast();
+                showGemmaErrorToast(`Gemma lỗi: ${extractApiErrorMessage(err.message)}`);
                 const wantsRetry = confirm(
                     `Gemma lỗi: ${extractApiErrorMessage(err.message)}.\n\n` +
                     `Bấm OK để THỬ LẠI bằng Gemma, hoặc bấm Hủy để chuyển tạm sang Google Dịch cho phần này.`
@@ -1663,6 +1595,7 @@ onExtensionMessage((event) => {
                 })
                 .catch((err) => {
                     console_error("Lỗi dịch, dùng bản gốc:", err);
+                    showGemmaErrorToast(`Lỗi dịch, dùng bản gốc: ${extractApiErrorMessage(err && err.message)}`);
                     st.translatedText = rawText;
                 })
                 .finally(() => {

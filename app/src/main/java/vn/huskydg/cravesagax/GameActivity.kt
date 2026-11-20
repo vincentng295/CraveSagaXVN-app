@@ -53,6 +53,7 @@ class GameActivity : AppCompatActivity() {
             return
         }
         ExtensionHub.init(applicationContext)
+        Notifier.requestPermissionIfNeeded(this)
 
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         WindowCompat.setDecorFitsSystemWindows(window, false)

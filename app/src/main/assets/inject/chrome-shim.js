@@ -312,6 +312,7 @@ function __createCraveChrome(opts) {
         downloads: downloads,
         // phần mở rộng riêng của app
         __fetch: smartFetch,
-        __app: function (action) { send({ t: 'app', action: action }); }
+        __app: function (action) { send({ t: 'app', action: action }); },
+        __notify: function (kind, text) { send({ t: 'notify', kind: String(kind || ''), text: String(text || '') }); }
     };
 }

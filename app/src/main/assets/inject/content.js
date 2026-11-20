@@ -497,6 +497,13 @@ async function callGeminiStreamWithRetry(url, contents, onRetryNotice) {
     throw lastErr;
 }
 
+// injected.js nhờ hiện thông báo của app Android (đang dịch / lỗi dịch / dịch xong).
+injectedPort.addEventListener('message', (event) => {
+    const d = event.data;
+    if (!d || d.type !== 'APP_NOTIFY') return;
+    if (typeof chrome.__notify === 'function') chrome.__notify(d.kind, d.text);
+});
+
 injectedPort.addEventListener('message', async (event) => {
     if (!event.data || event.data.type !== 'GEMMA_BATCH_REQUEST') return;
 
