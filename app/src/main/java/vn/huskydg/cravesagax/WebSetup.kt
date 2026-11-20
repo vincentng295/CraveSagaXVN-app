@@ -104,6 +104,11 @@ class GameClient(private val game: Game) : WebViewClient() {
     private var pendingGame = true
     private var hops = 0
 
+    override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) {
+        // Vào lại trang đăng nhập: bỏ tài khoản nhập dở của lần trước (chưa được xác nhận thành công).
+        if (game.login != null && url != null && LoginHelper.isLoginPage(game, url)) LoginHelper.clearPending()
+    }
+
     override fun onPageFinished(view: WebView, url: String?) {
         if (game.login == null || url == null) return
         when {
@@ -111,6 +116,7 @@ class GameClient(private val game: Game) : WebViewClient() {
             LoginHelper.isGamePage(game, url) -> { pendingGame = false; hops = 0 }
             pendingGame -> {
                 pendingGame = false
+                LoginHelper.commitPending(view.context, game) // đăng nhập thành công -> lưu tài khoản
                 if (hops++ < MAX_HOPS) view.loadUrl(game.url)
             }
         }

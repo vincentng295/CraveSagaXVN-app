@@ -228,6 +228,7 @@ object ExtensionHub {
             when (action) {
                 "pick" -> game.finish()
                 "reload" -> game.reloadGame()
+                "forget_login" -> game.forgetLogin()
             }
         }
     }

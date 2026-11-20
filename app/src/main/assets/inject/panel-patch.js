@@ -113,10 +113,15 @@
                 '<div class="game-links">' +
                 '<a href="#" id="app-reload" class="btn-game" style="background-color:#2563eb"><span>🔄 Tải lại trang game</span><span></span></a>' +
                 '<a href="#" id="app-pick" class="btn-game" style="background-color:#6b7280"><span>↩ Đổi phiên bản game</span><span></span></a>' +
+                '<a href="#" id="app-forget" class="btn-game" style="background-color:#7f1d1d"><span>🔑 Xóa tài khoản đã lưu</span><span></span></a>' +
                 '</div>';
             document.getElementById('app-reload').addEventListener('click', function (e) {
                 e.preventDefault();
                 window.chrome.__app('reload');
+            });
+            document.getElementById('app-forget').addEventListener('click', function (e) {
+                e.preventDefault();
+                window.chrome.__app('forget_login');
             });
             document.getElementById('app-pick').addEventListener('click', function (e) {
                 e.preventDefault();

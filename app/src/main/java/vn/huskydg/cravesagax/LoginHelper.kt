@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.webkit.WebView
+import android.widget.Toast
 import androidx.webkit.WebMessageCompat
 import androidx.webkit.WebViewCompat
 import org.json.JSONObject
@@ -35,6 +36,21 @@ object LoginHelper {
         return u.host.equals(g.host, true) && trimPath(u.path).startsWith(trimPath(g.path))
     }
 
+    // Tài khoản vừa nhập trên form, chỉ được lưu khi đăng nhập thành công (trang rời khỏi trang đăng nhập).
+    private class Pending(val gameId: String, val user: String, val pass: String)
+    @Volatile private var pending: Pending? = null
+
+    fun clearPending() { pending = null }
+
+    fun commitPending(ctx: Context, game: Game) {
+        val p = pending ?: return
+        pending = null
+        if (p.gameId != game.id) return
+        if (CredentialStore.save(ctx, game.id, p.user, p.pass)) {
+            Toast.makeText(ctx, "Đã lưu tài khoản ${game.title}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     /** Gắn script "chỉ hiện form" (chạy ngay đầu trang, không bị nháy) và chặn liên kết ngoài. */
     fun install(wv: WebView, game: Game) {
         val flow = game.login ?: return
@@ -45,7 +61,29 @@ object LoginHelper {
             .put("host", Uri.parse(flow.url).host)
             .put("path", trimPath(Uri.parse(flow.url).path))
             .put("sel", flow.formSelector)
+            .put("user", flow.userSelector)
+            .put("pass", flow.passSelector)
         WebViewCompat.addDocumentStartJavaScript(wv, "($FORM_ONLY_JS)($cfg);", loginOrigins)
+
+        // Cầu nối tài khoản: chỉ nhận từ khung chính của trang đăng nhập.
+        WebViewCompat.addWebMessageListener(wv, "CraveCred", loginOrigins) { view, message: WebMessageCompat, _, isMainFrame, reply ->
+            val m = try { JSONObject(message.data ?: "") } catch (_: Exception) { null }
+            if (isMainFrame && m != null) {
+                when (m.optString("t")) {
+                    "get" -> {
+                        val c = CredentialStore.load(view.context, game.id)
+                        reply.postMessage(
+                            if (c == null) "{}" else JSONObject().put("u", c.user).put("p", c.pass).toString()
+                        )
+                    }
+                    "cap" -> {
+                        val u = m.optString("u")
+                        val p = m.optString("p")
+                        if (u.isNotEmpty() && p.isNotEmpty()) pending = Pending(game.id, u, p)
+                    }
+                }
+            }
+        }
 
         WebViewCompat.addWebMessageListener(wv, "CraveExternal", linkOrigins) { view, message: WebMessageCompat, _, _, _ ->
             openExternal(view.context, message.data)
@@ -103,6 +141,37 @@ function(cfg){
       '[' + KEEP + ']{position:static!important;transform:none!important;width:auto!important;max-width:none!important;height:auto!important;min-height:0!important;max-height:none!important;overflow:visible!important;opacity:1!important;visibility:visible!important;margin:0!important;padding:0!important;border:0!important;background:none!important;box-shadow:none!important;float:none!important}' +
       '[' + TGT + ']{position:relative!important;width:92%!important;max-width:460px!important;margin:12px auto!important;opacity:1!important;visibility:visible!important;transform:none!important;box-sizing:border-box!important}';
     root.appendChild(st);
+    // ---- Điền sẵn tài khoản đã lưu + báo cho app tài khoản vừa nhập ----
+    var cred = window.CraveCred, creds = null, filled = false;
+    function setVal(el, v){
+      var d = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+      d.set.call(el, v);
+      el.dispatchEvent(new Event('input', {bubbles: true}));
+      el.dispatchEvent(new Event('change', {bubbles: true}));
+    }
+    function fill(){
+      if (filled || !creds || !creds.u) return;
+      var u = document.querySelector(cfg.user), p = document.querySelector(cfg.pass);
+      if (!u || !p) return;
+      filled = true;
+      if (!u.value) setVal(u, creds.u);
+      if (!p.value) setVal(p, creds.p);
+    }
+    function capture(){
+      var u = document.querySelector(cfg.user), p = document.querySelector(cfg.pass);
+      if (cred && u && p && u.value && p.value) cred.postMessage(JSON.stringify({t: 'cap', u: u.value, p: p.value}));
+    }
+    if (cred) {
+      cred.onmessage = function(ev){ try { creds = JSON.parse(ev.data); fill(); } catch (e) {} };
+      cred.postMessage(JSON.stringify({t: 'get'}));
+    }
+    document.addEventListener('click', function(e){
+      var t = document.querySelector(cfg.sel);
+      if (t && e.target && t.contains(e.target) && e.target.closest('button,input[type=submit]')) capture();
+    }, true);
+    document.addEventListener('keydown', function(e){ if (e.key === 'Enter') capture(); }, true);
+    document.addEventListener('submit', capture, true);
+
     var SKIP = {SCRIPT:1, STYLE:1, LINK:1, META:1, NOSCRIPT:1, TEMPLATE:1};
     var CAPTCHA = 'iframe[src*="recaptcha"],iframe[src*="hcaptcha"],iframe[src*="challenges.cloudflare"],iframe[title*="recaptcha"]';
     function show(el){
@@ -129,7 +198,7 @@ function(cfg){
     var queued = false;
     function schedule(){
       if (queued) return; queued = true;
-      requestAnimationFrame(function(){ queued = false; apply(); });
+      requestAnimationFrame(function(){ queued = false; apply(); fill(); });
     }
     new MutationObserver(schedule).observe(root, {childList: true, subtree: true});
     document.addEventListener('DOMContentLoaded', schedule);

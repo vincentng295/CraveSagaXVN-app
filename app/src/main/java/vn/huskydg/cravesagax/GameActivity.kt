@@ -163,6 +163,12 @@ class GameActivity : AppCompatActivity() {
         drawer.openDrawer(GravityCompat.END)
     }
 
+    /** Xóa tài khoản đã lưu của phiên bản game đang chơi. */
+    fun forgetLogin() {
+        CredentialStore.clear(this, game.id)
+        android.widget.Toast.makeText(this, "Đã xóa tài khoản đã lưu của ${game.title}", android.widget.Toast.LENGTH_SHORT).show()
+    }
+
     fun reloadGame() {
         if (this::gameView.isInitialized) {
             drawer.closeDrawer(GravityCompat.END)
