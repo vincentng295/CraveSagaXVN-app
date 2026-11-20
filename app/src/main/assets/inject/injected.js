@@ -1464,33 +1464,57 @@ onExtensionMessage((event) => {
         return Array.from(collectedMap.entries()).map(([text, speaker]) => ({ text, speaker }));
     }
 
-    // Dịch 1 lô câu thoại bằng Gemma, KHÔNG âm thầm fallback về Google Dịch khi
-    // gặp lỗi. Khi lỗi xảy ra, hỏi người chơi qua confirm(): OK = thử lại bằng
-    // Gemma, Hủy = chuyển tạm sang Google Dịch cho các câu của file này. Khi dịch
-    // thành công, báo cho người chơi biết bằng alert().
+    // Dịch 1 lô câu thoại bằng Gemma, KHÔNG BAO GIỜ fallback về Google Dịch. Khi lỗi, hiện
+    // NGAY thông báo hệ thống kèm 2 nút: "Dịch lại" (thử 1 lần) và "Dịch đến khi thành công"
+    // (tự thử lại sau 10s, 20s, 30s... tối đa 1p30s, lặp mãi tới khi xong; có nút "Dừng tự thử").
+    let gemmaActionResolver = null;
+    onExtensionMessage((event) => {
+        if (!event.data || event.data.type !== 'GEMMA_USER_ACTION') return;
+        if (gemmaActionResolver) gemmaActionResolver(event.data.action);
+    });
+
+    // Chờ người dùng bấm nút trên thông báo (hoặc hết [timeoutMs] -> 'timeout'; null = chờ mãi).
+    function waitGemmaAction(timeoutMs) {
+        return new Promise((resolve) => {
+            let timer = null;
+            const done = (a) => {
+                if (timer) clearTimeout(timer);
+                gemmaActionResolver = null;
+                resolve(a);
+            };
+            gemmaActionResolver = done;
+            if (timeoutMs != null) timer = setTimeout(() => done('timeout'), timeoutMs);
+        });
+    }
+
     async function translateBatchWithGemmaConfirm(uniqueItems, fileName = null, onFallbackJob = null) {
+        let auto = false;
+        let failStreak = 0;
         while (true) {
             showGemmaToast(`Đang dịch ${uniqueItems.length} câu bằng Gemma...`);
             try {
                 const map = await callGemmaBatch(uniqueItems);
                 hideGemmaToast();
+                notifyApp('retry_clear');
                 showGemmaDoneToast('Dịch hoàn tất! Mời bạn thưởng thức câu chuyện.');
                 return new Map(Object.entries(map));
             } catch (err) {
                 hideGemmaToast();
-                showGemmaErrorToast(`Gemma lỗi: ${extractApiErrorMessage(err.message)}`);
-                const wantsRetry = confirm(
-                    `Gemma lỗi: ${extractApiErrorMessage(err.message)}.\n\n` +
-                    `Bấm OK để THỬ LẠI bằng Gemma, hoặc bấm Hủy để chuyển tạm sang Google Dịch cho phần này.`
-                );
-                if (!wantsRetry) {
-                    showGemmaErrorToast('Đang chuyển tạm sang Google Dịch...');
-                    // Đưa vào hàng đợi nền: thử lại Gemma sau 10s,20s,...,1p30s (lặp) tới khi xong.
-                    const job = enqueueGemmaRetry(uniqueItems, fileName);
-                    if (job && typeof onFallbackJob === 'function') onFallbackJob(job);
-                    return new Map();
+                const reason = extractApiErrorMessage(err && err.message);
+                if (auto) {
+                    const waitS = GEMMA_QUEUE_DELAYS_S[Math.min(failStreak, GEMMA_QUEUE_DELAYS_S.length - 1)];
+                    failStreak++;
+                    notifyApp('retry_auto', `Gemma lỗi: ${reason}. Tự thử lại sau ${formatWaitVi(waitS)} (lần ${failStreak + 1})...`);
+                    const a = await waitGemmaAction(waitS * 1000);
+                    if (a === 'stop') auto = false; // rơi xuống hỏi lại bên dưới
+                    else continue;                  // 'timeout' hoặc 'retry' (dịch lại ngay)
                 }
-                // Người dùng chọn thử lại -> lặp lại vòng while, gọi callGemmaBatch lần nữa.
+                if (!auto) {
+                    notifyApp('retry_prompt', `Gemma lỗi: ${reason}\nChọn "Dịch lại" hoặc "Dịch đến khi thành công".`);
+                    const a = await waitGemmaAction(null);
+                    if (a === 'auto') { auto = true; failStreak = 0; }
+                    // 'retry' -> lặp lại vòng while, gọi Gemma lần nữa
+                }
             }
         }
     }

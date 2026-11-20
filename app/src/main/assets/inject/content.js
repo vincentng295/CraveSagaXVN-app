@@ -34,6 +34,9 @@ chrome.runtime.onMessage.addListener((message) => {
     if (message && message.type === 'SET_TRANSLATION_STATE') {
         sendToInjected({ type: 'GAME_TRANSLATION_STATE_UPDATE', enabled: message.enabled });
     }
+    if (message && message.type === 'GEMMA_USER_ACTION') {
+        sendToInjected({ type: 'GEMMA_USER_ACTION', action: message.action });
+    }
     if (message && message.type === 'CLEAR_FAST_CACHE') {
         sendToInjected({ type: 'GAME_FASTCACHE_CLEAR' });
     }

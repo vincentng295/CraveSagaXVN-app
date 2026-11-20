@@ -50,6 +50,10 @@
             android:name=".OptionsActivity"
             android:exported="false"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|keyboard|uiMode|density" />
+        <receiver
+            android:name=".GemmaActionReceiver"
+            android:exported="false" />
+
         <service
             android:name=".GemmaService"
             android:exported="false"

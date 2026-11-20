@@ -173,6 +173,12 @@ object ExtensionHub {
         broadcast("{\"t\":\"msg\",\"msg\":$json}", Kind.PANEL)
     }
 
+    /** Gửi 1 message tới content script của trang game (chrome.runtime.onMessage phía content.js). */
+    fun sendToContent(json: String) {
+        if (!started) return
+        broadcast("{\"t\":\"msg\",\"msg\":$json}", Kind.CONTENT)
+    }
+
     /**
      * Đọc-sửa-ghi nguyên tử 1 key storage trên luồng io rồi phát storage.onChanged.
      * [transform] nhận JSON hiện tại (null nếu chưa có), trả JSON mới (null = không đổi). Chặn tới khi xong.

@@ -24,6 +24,7 @@ import androidx.core.content.ContextCompat
  *  - "done"    : Dịch hoàn tất
  *  - "error"   : Lỗi dịch (tự biến mất sau ~10 giây)
  *  - "clear"   : gỡ thông báo "đang dịch"
+ *  - "retry_prompt" / "retry_auto" / "retry_clear": lỗi Gemma ở game, có nút Dịch lại / Dịch đến khi thành công
  *  - "queue"   : hàng đợi dịch nền Gemma (đang chờ thử lại / đang dịch lại), "queue_clear" để gỡ
  * Chưa được cấp quyền thông báo (Android 13+) thì tạm dùng Toast để không mất tin.
  */
@@ -33,6 +34,7 @@ object Notifier {
     private const val ID_PROGRESS = 2001
     private const val ID_RESULT = 2002
     private const val ID_QUEUE = 2003
+    private const val ID_RETRY = 2005 // lỗi Gemma ở game: nút Dịch lại / Dịch đến khi thành công
     const val ID_JOB = 2004 // thông báo foreground service dịch từ điển (GemmaService)
     private const val REQ_PERMISSION = 7001
 
@@ -107,6 +109,11 @@ object Notifier {
         return PendingIntent.getActivity(ctx, 0, i, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
     }
 
+    private fun retryAction(ctx: Context, action: String, req: Int): PendingIntent {
+        val i = Intent(ctx, GemmaActionReceiver::class.java).putExtra(GemmaActionReceiver.EXTRA_ACTION, action)
+        return PendingIntent.getBroadcast(ctx, req, i, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+    }
+
     private fun openOptionsIntent(ctx: Context): PendingIntent {
         val i = Intent(ctx, OptionsActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
@@ -157,6 +164,10 @@ object Notifier {
                 nm.cancel(ID_PROGRESS)
                 return@post
             }
+            if (kind == "retry_clear") {
+                nm.cancel(ID_RETRY)
+                return@post
+            }
             if (kind == "queue_clear") {
                 nm.cancel(ID_QUEUE)
                 return@post
@@ -164,6 +175,13 @@ object Notifier {
             if (text.isBlank()) return@post
 
             if (!canNotify(ctx)) {
+                if (kind == "retry_prompt") {
+                    // Không có thông báo thì không có nút bấm -> tự dịch đến khi thành công để game không đứng mãi.
+                    Toast.makeText(ctx, text, Toast.LENGTH_LONG).show()
+                    ExtensionHub.sendToContent("{\"type\":\"GEMMA_USER_ACTION\",\"action\":\"auto\"}")
+                    return@post
+                }
+                if (kind == "retry_auto") return@post
                 if (kind == "queue") return@post // hàng đợi nền cập nhật liên tục, không dùng Toast để khỏi spam
                 // "progress" chỉ nhắc ngắn, tránh spam Toast mỗi lần cập nhật.
                 Toast.makeText(ctx, text, if (kind == "error") Toast.LENGTH_LONG else Toast.LENGTH_SHORT).show()
@@ -187,6 +205,38 @@ object Notifier {
                         .setTimeoutAfter(10 * 60 * 1000L) // phòng khi trang bị đóng mà chưa kịp "clear"
                         .build()
                     try { nm.notify(ID_PROGRESS, n) } catch (_: SecurityException) {}
+                }
+                "retry_prompt" -> {
+                    val n = NotificationCompat.Builder(ctx, CH_RESULT)
+                        .setSmallIcon(android.R.drawable.stat_notify_error)
+                        .setContentTitle("Gemma lỗi — game đang chờ")
+                        .setContentText(text)
+                        .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+                        .setOngoing(true)
+                        .setPriority(NotificationCompat.PRIORITY_HIGH)
+                        .setCategory(NotificationCompat.CATEGORY_ERROR)
+                        .setContentIntent(openGameIntent(ctx))
+                        .addAction(android.R.drawable.ic_popup_sync, "Dịch lại", retryAction(ctx, "retry", 11))
+                        .addAction(android.R.drawable.ic_menu_rotate, "Dịch đến khi thành công", retryAction(ctx, "auto", 12))
+                        .build()
+                    try { nm.notify(ID_RETRY, n) } catch (_: SecurityException) {}
+                }
+                "retry_auto" -> {
+                    val n = NotificationCompat.Builder(ctx, CH_PROGRESS)
+                        .setSmallIcon(android.R.drawable.stat_notify_sync)
+                        .setContentTitle("Gemma đang tự thử lại")
+                        .setContentText(text)
+                        .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+                        .setProgress(0, 0, true)
+                        .setOngoing(true)
+                        .setOnlyAlertOnce(true)
+                        .setPriority(NotificationCompat.PRIORITY_LOW)
+                        .setCategory(NotificationCompat.CATEGORY_PROGRESS)
+                        .setContentIntent(openGameIntent(ctx))
+                        .addAction(android.R.drawable.ic_popup_sync, "Dịch lại ngay", retryAction(ctx, "retry", 11))
+                        .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Dừng tự thử", retryAction(ctx, "stop", 13))
+                        .build()
+                    try { nm.notify(ID_RETRY, n) } catch (_: SecurityException) {}
                 }
                 "queue" -> {
                     val n = NotificationCompat.Builder(ctx, CH_PROGRESS)
