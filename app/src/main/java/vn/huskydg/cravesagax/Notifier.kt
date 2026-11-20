@@ -23,6 +23,7 @@ import androidx.core.content.ContextCompat
  *  - "done"    : Dịch hoàn tất
  *  - "error"   : Lỗi dịch (tự biến mất sau ~10 giây)
  *  - "clear"   : gỡ thông báo "đang dịch"
+ *  - "queue"   : hàng đợi dịch nền Gemma (đang chờ thử lại / đang dịch lại), "queue_clear" để gỡ
  * Chưa được cấp quyền thông báo (Android 13+) thì tạm dùng Toast để không mất tin.
  */
 object Notifier {
@@ -30,6 +31,7 @@ object Notifier {
     private const val CH_RESULT = "translate_result"
     private const val ID_PROGRESS = 2001
     private const val ID_RESULT = 2002
+    private const val ID_QUEUE = 2003
     private const val REQ_PERMISSION = 7001
 
     private val main = Handler(Looper.getMainLooper())
@@ -73,9 +75,14 @@ object Notifier {
                 nm.cancel(ID_PROGRESS)
                 return@post
             }
+            if (kind == "queue_clear") {
+                nm.cancel(ID_QUEUE)
+                return@post
+            }
             if (text.isBlank()) return@post
 
             if (!canNotify(ctx)) {
+                if (kind == "queue") return@post // hàng đợi nền cập nhật liên tục, không dùng Toast để khỏi spam
                 // "progress" chỉ nhắc ngắn, tránh spam Toast mỗi lần cập nhật.
                 Toast.makeText(ctx, text, if (kind == "error") Toast.LENGTH_LONG else Toast.LENGTH_SHORT).show()
                 return@post
@@ -98,6 +105,22 @@ object Notifier {
                         .setTimeoutAfter(10 * 60 * 1000L) // phòng khi trang bị đóng mà chưa kịp "clear"
                         .build()
                     try { nm.notify(ID_PROGRESS, n) } catch (_: SecurityException) {}
+                }
+                "queue" -> {
+                    val n = NotificationCompat.Builder(ctx, CH_PROGRESS)
+                        .setSmallIcon(android.R.drawable.stat_notify_sync)
+                        .setContentTitle("Dịch nền Gemma")
+                        .setContentText(text)
+                        .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+                        .setProgress(0, 0, true)
+                        .setOngoing(true)
+                        .setOnlyAlertOnce(true)
+                        .setPriority(NotificationCompat.PRIORITY_LOW)
+                        .setCategory(NotificationCompat.CATEGORY_PROGRESS)
+                        .setContentIntent(openGameIntent(ctx))
+                        .setTimeoutAfter(5 * 60 * 1000L) // mỗi lần cập nhật được đặt lại; tối đa chờ 1p30s giữa 2 lần
+                        .build()
+                    try { nm.notify(ID_QUEUE, n) } catch (_: SecurityException) {}
                 }
                 "done", "error" -> {
                     val isError = kind == "error"

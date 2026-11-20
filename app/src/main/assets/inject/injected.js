@@ -259,7 +259,7 @@ let __gemmaReqCounter = 0;
 // giống format "contents" của Gemini API — gửi NGUYÊN cả lịch sử hội thoại mỗi lần
 // (API không lưu state), để model thấy được các lượt dịch trước đó và giữ nhất
 // quán văn phong/ngữ cảnh giữa các lô.
-function requestGemmaBatchFromContentScript(contents) {
+function requestGemmaBatchFromContentScript(contents, onRetry) {
     return new Promise((resolve, reject) => {
         const requestId = 'gemma_' + Date.now() + '_' + (++__gemmaReqCounter);
 
@@ -275,7 +275,9 @@ function requestGemmaBatchFromContentScript(contents) {
             // toast, KHÔNG resolve/reject vì kết quả thật vẫn chưa về.
             if (event.data.type === 'GEMMA_BATCH_RETRY') {
                 const secs = Math.round((event.data.delayMs || 30000) / 1000);
-                updateGemmaToast(`Gemma bị giới hạn quota (429), thử lại sau ${secs}s (lần ${event.data.attempt}/${event.data.max})...`);
+                const retryText = `Gemma bị giới hạn quota (429), thử lại sau ${secs}s (lần ${event.data.attempt}/${event.data.max})...`;
+                if (typeof onRetry === 'function') onRetry(retryText);
+                else updateGemmaToast(retryText);
                 return;
             }
 
@@ -331,7 +333,7 @@ function parseGemmaRawText(rawText) {
     return Array.isArray(parsed) ? parsed : (parsed.response || []);
 }
 
-async function callGemmaBatch(uniqueItems) {
+async function callGemmaBatch(uniqueItems, opts) {
     if (!uniqueItems.length) return {};
     if (!geminiApiKey) {
         console_warn('[Gemma] Thiếu API Key, bỏ qua dịch lô.');
@@ -356,7 +358,7 @@ async function callGemmaBatch(uniqueItems) {
 
             contents.push({ role: 'user', parts: [{ text: userText }] });
 
-            const rawText = await requestGemmaBatchFromContentScript(contents);
+            const rawText = await requestGemmaBatchFromContentScript(contents, opts && opts.onRetry);
             const items = parseGemmaRawText(rawText);
 
             items.forEach((item) => {
@@ -377,6 +379,176 @@ async function callGemmaBatch(uniqueItems) {
         throw err;
     }
 }
+
+
+/**
+ * ==== Hàng đợi dịch nền Gemma ====
+ * Khi Gemma lỗi và người chơi chọn "chuyển tạm sang Google Dịch", cả lô câu đó được
+ * đưa vào hàng đợi. Nền sẽ tự gọi lại Gemma với các mốc chờ 10s, 20s, 30s, 40s, 50s,
+ * 1 phút, rồi 1p30s (tối đa, lặp mãi) cho tới khi dịch xong, sau đó thay bản Google
+ * bằng bản Gemma trong từ điển (chỉ thay câu CHƯA bị người dùng sửa tay).
+ *  - Chạy tuần tự từng lô, backoff dùng chung (lỗi API/quota ảnh hưởng mọi lô).
+ *  - Tự tạm dừng khi đang dịch Gemma ở "tiền cảnh", khi chưa có API key hoặc khi
+ *    engine không còn là Gemma.
+ *  - Lưu qua storage (GEMMA_QUEUE_SAVE/RESTORE) nên tắt game mở lại vẫn tiếp tục.
+ */
+const GEMMA_QUEUE_DELAYS_S = [10, 20, 30, 40, 50, 60, 90];
+const gemmaQueue = { jobs: [], running: false, failStreak: 0 };
+// Bản Google Dịch (nguyên văn, đúng như lưu trong từ điển) của từng câu, để biết
+// câu nào còn "nguyên bản fallback" (chưa bị người dùng sửa) khi nâng cấp lên Gemma.
+const googleFallbackRaw = new Map();
+
+function gemmaQueueDelayS() {
+    return GEMMA_QUEUE_DELAYS_S[Math.min(gemmaQueue.failStreak, GEMMA_QUEUE_DELAYS_S.length - 1)];
+}
+
+function formatWaitVi(secs) {
+    if (secs < 60) return `${secs}s`;
+    const m = Math.floor(secs / 60), r = secs % 60;
+    return r ? `${m}p${r}s` : `${m} phút`;
+}
+
+function gemmaQueuePendingCount() {
+    return gemmaQueue.jobs.reduce((n, j) => n + j.items.length, 0);
+}
+
+function notifyQueue(text) {
+    notifyApp('queue', text);
+}
+
+function gemmaQueuePersist() {
+    sendToExtension({
+        type: 'GEMMA_QUEUE_SAVE',
+        jobs: gemmaQueue.jobs.map((j) => ({ id: j.id, fileName: j.fileName, items: j.items }))
+    });
+}
+
+function gemmaQueueSleep(ms) {
+    return new Promise((r) => setTimeout(r, ms));
+}
+
+// Thêm 1 lô vào hàng đợi (bỏ câu trùng với lô đã có). Trả về job (hoặc null nếu không còn gì để thêm).
+function enqueueGemmaRetry(items, fileName) {
+    const queued = new Set();
+    gemmaQueue.jobs.forEach((j) => j.items.forEach((it) => queued.add(it.text)));
+    const fresh = items.filter((it) => it && it.text && !queued.has(it.text))
+        .map((it) => ({ text: it.text, speaker: it.speaker || null, old: '' }));
+    if (!fresh.length) return null;
+
+    const job = {
+        id: 'gq_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+        fileName: fileName || null,
+        items: fresh,
+        ready: false,        // chờ Google Dịch dịch xong file hiện tại để chụp bản fallback
+        createdAt: Date.now()
+    };
+    gemmaQueue.jobs.push(job);
+    gemmaQueuePersist();
+    notifyQueue(`Đã chuyển tạm sang Google Dịch. Gemma sẽ tự dịch lại ${fresh.length} câu ở nền, thử sau ${formatWaitVi(gemmaQueueDelayS())}.`);
+    gemmaQueuePump();
+    return job;
+}
+
+// Gọi sau khi file đã dịch xong bằng Google: chụp bản Google của từng câu để lát nữa không đè lên bản người dùng đã sửa.
+function gemmaQueueAttachGoogle(job) {
+    if (!job) return;
+    job.items.forEach((it) => { it.old = googleFallbackRaw.get(it.text) || ''; });
+    job.ready = true;
+    gemmaQueuePersist();
+}
+
+async function gemmaQueuePump() {
+    if (gemmaQueue.running) return;
+    gemmaQueue.running = true;
+    try {
+        while (gemmaQueue.jobs.length) {
+            const job = gemmaQueue.jobs[0];
+            const waitS = gemmaQueueDelayS();
+            await gemmaQueueSleep(waitS * 1000);
+
+            // Job mới tạo còn đang chờ chụp bản Google (tối đa 2 phút), job khôi phục thì đã sẵn sàng.
+            let guard = 0;
+            while (!job.ready && guard++ < 24) await gemmaQueueSleep(5000);
+            job.ready = true;
+
+            // Tạm dừng nếu đang dịch Gemma ở tiền cảnh / thiếu key / không dùng Gemma.
+            let paused = false;
+            while (gemmaToastActiveCount > 0 || !geminiApiKey || translateEngine !== 'gemma') {
+                if (!paused) {
+                    paused = true;
+                    notifyQueue(gemmaToastActiveCount > 0
+                        ? 'Hàng đợi Gemma tạm dừng, đang dịch phần khác...'
+                        : 'Hàng đợi Gemma tạm dừng: cần bật engine Gemma và nhập API key.');
+                }
+                await gemmaQueueSleep(5000);
+            }
+
+            // Câu nào đã có trong từ điển do người dùng sửa tay thì không cần dịch lại.
+            const todo = job.items.filter((it) => {
+                const cur = customTranslationDict && customTranslationDict[it.text];
+                const curVal = cur ? extractTranslatedValue(cur) : '';
+                return !curVal || !it.old || curVal === it.old;
+            });
+            if (!todo.length) {
+                gemmaQueue.jobs.shift();
+                gemmaQueuePersist();
+                if (!gemmaQueue.jobs.length) notifyApp('queue_clear');
+                continue;
+            }
+
+            notifyQueue(`Đang dịch lại ${todo.length} câu bằng Gemma (nền)...`);
+            try {
+                const map = await callGemmaBatch(todo.map((it) => ({ text: it.text, speaker: it.speaker })), {
+                    onRetry: (t) => notifyQueue(t)
+                });
+                const entries = [];
+                todo.forEach((it) => {
+                    const tr = map[it.text];
+                    if (typeof tr === 'string' && tr.trim()) {
+                        entries.push({ original: it.text, translated: tr, expectedOld: it.old || '', speaker: it.speaker || undefined });
+                    }
+                });
+                if (!entries.length) throw new Error('Gemma không trả về câu dịch nào');
+
+                sendToExtension({ type: 'GEMMA_UPGRADE_TRANSLATIONS', entries, chap: job.fileName || undefined });
+
+                gemmaQueue.failStreak = 0;
+                gemmaQueue.jobs.shift();
+                gemmaQueuePersist();
+                if (gemmaQueue.jobs.length) {
+                    notifyQueue(`Đã dịch lại ${entries.length} câu bằng Gemma. Còn ${gemmaQueuePendingCount()} câu trong hàng đợi...`);
+                } else {
+                    notifyApp('queue_clear');
+                    showGemmaDoneToast(`Gemma đã dịch lại ${entries.length} câu ở nền${job.fileName ? ` (${job.fileName})` : ''}. Vào lại đoạn truyện để thấy bản dịch mới.`);
+                }
+            } catch (err) {
+                gemmaQueue.failStreak++;
+                const nextS = gemmaQueueDelayS();
+                console_error('[Gemma queue] Lỗi, sẽ thử lại:', err);
+                notifyQueue(`Dịch nền Gemma lỗi: ${extractApiErrorMessage(err && err.message)}. Thử lại sau ${formatWaitVi(nextS)} (lần ${gemmaQueue.failStreak + 1}, còn ${gemmaQueuePendingCount()} câu).`);
+            }
+        }
+    } finally {
+        gemmaQueue.running = false;
+        if (gemmaQueue.jobs.length) gemmaQueuePump(); // job mới chen vào lúc vừa kết thúc vòng
+    }
+}
+
+onExtensionMessage((event) => {
+    if (!event.data || event.data.type !== 'GEMMA_QUEUE_RESTORE') return;
+    const saved = Array.isArray(event.data.jobs) ? event.data.jobs : [];
+    let added = 0;
+    saved.forEach((j) => {
+        if (!j || !Array.isArray(j.items) || !j.items.length) return;
+        if (gemmaQueue.jobs.some((x) => x.id === j.id)) return;
+        gemmaQueue.jobs.push({ id: j.id, fileName: j.fileName || null, items: j.items, ready: true, createdAt: Date.now() });
+        added += j.items.length;
+    });
+    if (added) {
+        notifyQueue(`Tiếp tục dịch nền Gemma cho ${added} câu còn lại...`);
+        gemmaQueuePump();
+    }
+});
 
 onExtensionMessage((event) => {
     if (event.data && event.data.type === 'GAME_DICT_UPDATE') {
@@ -1167,6 +1339,7 @@ onExtensionMessage((event) => {
                 const result = sanitizeAndFormatTranslation(translated);
                 
                 translateCache.set(cleanText, result); 
+                googleFallbackRaw.set(cleanText, translated);
 
                 sendToExtension({
                     type: 'SAVE_NEW_TRANSLATION',
@@ -1295,7 +1468,7 @@ onExtensionMessage((event) => {
     // gặp lỗi. Khi lỗi xảy ra, hỏi người chơi qua confirm(): OK = thử lại bằng
     // Gemma, Hủy = chuyển tạm sang Google Dịch cho các câu của file này. Khi dịch
     // thành công, báo cho người chơi biết bằng alert().
-    async function translateBatchWithGemmaConfirm(uniqueItems) {
+    async function translateBatchWithGemmaConfirm(uniqueItems, fileName = null, onFallbackJob = null) {
         while (true) {
             showGemmaToast(`Đang dịch ${uniqueItems.length} câu bằng Gemma...`);
             try {
@@ -1312,6 +1485,9 @@ onExtensionMessage((event) => {
                 );
                 if (!wantsRetry) {
                     showGemmaErrorToast('Đang chuyển tạm sang Google Dịch...');
+                    // Đưa vào hàng đợi nền: thử lại Gemma sau 10s,20s,...,1p30s (lặp) tới khi xong.
+                    const job = enqueueGemmaRetry(uniqueItems, fileName);
+                    if (job && typeof onFallbackJob === 'function') onFallbackJob(job);
                     return new Map();
                 }
                 // Người dùng chọn thử lại -> lặp lại vòng while, gọi callGemmaBatch lần nữa.
@@ -1323,11 +1499,12 @@ onExtensionMessage((event) => {
         const lines = rawScript.split('\n');
         let currentSpeaker = null;
 
+        let fallbackJob = null;
         if (translateEngine === 'gemma') {
             const uniqueItems = collectUntranslatedTexts(lines);
             console_log(`[Gemma] Gộp ${uniqueItems.length} câu chưa dịch của "${fileName || ''}" vào 1 request...`);
             if (uniqueItems.length > 0) {
-                currentGemmaBatchResults = await translateBatchWithGemmaConfirm(uniqueItems);
+                currentGemmaBatchResults = await translateBatchWithGemmaConfirm(uniqueItems, fileName, (j) => { fallbackJob = j; });
             } else {
                 currentGemmaBatchResults = new Map();
             }
@@ -1357,7 +1534,9 @@ onExtensionMessage((event) => {
             return line;
         });
 
-        return (await Promise.all(tasks)).join('\n');
+        const joined = (await Promise.all(tasks)).join('\n');
+        if (fallbackJob) gemmaQueueAttachGoogle(fallbackJob);
+        return joined;
     }
 
     Function.prototype.toString = new Proxy(_nativeToString, {

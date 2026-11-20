@@ -347,6 +347,53 @@ injectedPort.addEventListener('message', (event) => {
     }
 });
 
+// ==== Hàng đợi dịch nền Gemma: lưu hàng đợi + nâng cấp bản Google -> Gemma ====
+function whenDictLoaded(fn) {
+    if (isDictLoaded) { fn(); return; }
+    const t = setInterval(() => { if (isDictLoaded) { clearInterval(t); fn(); } }, 500);
+}
+
+// Chỉ thay câu còn là "nguyên bản fallback Google" (hoặc rỗng) — câu người dùng đã sửa tay giữ nguyên.
+function upgradeTranslations(entries, chap) {
+    let changed = 0;
+    entries.forEach((e) => {
+        if (!e || !e.original || !e.translated) return;
+        const ex = localDictCache[e.original];
+        if (!ex) {
+            localDictCache[e.original] = {
+                translated: e.translated, name: e.speaker || null, chap: chap || null,
+                time: Math.floor(Date.now() / 1000)
+            };
+            changed++;
+            return;
+        }
+        const old = typeof ex === 'string' ? ex : (ex.translated || '');
+        if (old.trim() && old !== e.expectedOld) return;
+        localDictCache[e.original] = (typeof ex === 'string')
+            ? { translated: e.translated, name: e.speaker || null, chap: chap || null, time: Math.floor(Date.now() / 1000) }
+            : { ...ex, translated: e.translated };
+        changed++;
+    });
+    if (changed) scheduleSaveToStorage();
+}
+
+injectedPort.addEventListener('message', (event) => {
+    const d = event.data;
+    if (!d) return;
+    if (d.type === 'GEMMA_QUEUE_SAVE') {
+        chrome.storage.local.set({ gemmaRetryQueue: Array.isArray(d.jobs) ? d.jobs : [] });
+    } else if (d.type === 'GEMMA_UPGRADE_TRANSLATIONS') {
+        const entries = Array.isArray(d.entries) ? d.entries : [];
+        whenDictLoaded(() => upgradeTranslations(entries, d.chap));
+    }
+});
+
+// Khôi phục hàng đợi còn dang dở từ lần chạy trước.
+chrome.storage.local.get({ gemmaRetryQueue: [] }, (r) => {
+    const jobs = r && Array.isArray(r.gemmaRetryQueue) ? r.gemmaRetryQueue : [];
+    if (jobs.length) sendToInjected({ type: 'GEMMA_QUEUE_RESTORE', jobs });
+});
+
 // ==== Relay gọi Gemini/Gemma API thay cho injected.js ====
 // injected.js chạy ở MAIN world nên không có host_permissions bypass CORS.
 // content.js chạy ở isolated world nên fetch() ở đây mới gọi được thẳng tới
