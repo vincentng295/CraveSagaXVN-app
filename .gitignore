@@ -8,3 +8,8 @@ captures/
 .externalNativeBuild/
 .cxx/
 .kotlin/
+
+# Khóa ký release (không commit)
+MV2R_KEYSTORE.env
+*.jks
+*.keystore

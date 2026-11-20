@@ -30,6 +30,17 @@ jobs:
         with:
           gradle-version: '8.10.2'
 
+      - name: Ghi MV2R_KEYSTORE.env từ secret
+        env:
+          MV2R_KEYSTORE_ENV: ${{ secrets.MV2R_KEYSTORE_ENV }}
+        run: |
+          if [ -n "$MV2R_KEYSTORE_ENV" ]; then
+            printf '%s\n' "$MV2R_KEYSTORE_ENV" > MV2R_KEYSTORE.env
+            echo "Đã ghi MV2R_KEYSTORE.env từ secret MV2R_KEYSTORE_ENV."
+          else
+            echo "Không có secret MV2R_KEYSTORE_ENV -> build ký bằng khóa debug."
+          fi
+
       - name: Build release APK
         run: gradle :app:assembleRelease --no-daemon
 
