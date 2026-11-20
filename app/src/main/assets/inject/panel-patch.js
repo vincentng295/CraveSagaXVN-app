@@ -80,9 +80,52 @@
             'button:active,.btn-game:active{transform:scale(.98);filter:brightness(1.12)}',
             '.toggle-wrap{cursor:pointer}'
         ].join('') : [
-            'body{font-size:16px}',
-            'button,.btn{min-height:46px;font-size:15px !important;border-radius:10px !important}',
-            'input,select,textarea{font-size:16px !important;min-height:44px;box-sizing:border-box}'
+            // ---- Trang "Quản lý Từ điển": bố cục dọc cho điện thoại, mỗi câu thoại là 1 thẻ ----
+            'html,body{overflow-x:hidden}',
+            'body{padding:10px !important;font-size:16px;line-height:1.4}',
+            '.container{padding:16px !important;max-width:none !important;border-radius:16px !important;box-shadow:none !important;background:#1a1f36 !important}',
+            '.header{flex-direction:column;align-items:stretch !important;gap:12px !important;padding-bottom:14px !important;margin-bottom:16px !important;border-bottom-color:#2a3050 !important}',
+            '.title h1{font-size:22px !important;line-height:1.25}',
+            '.title p{font-size:14px !important;line-height:1.5}',
+            '.header-actions{flex-direction:column;align-items:stretch !important;width:100%;gap:0 !important}',
+            '.header-actions .toolbar{width:100%}',
+            '.toolbar{gap:10px !important;margin-bottom:14px !important}',
+            // nút
+            '.btn{min-height:48px;padding:12px 18px !important;font-size:15px !important;border-radius:12px !important;white-space:normal !important;line-height:1.25}',
+            '.header-actions .btn{flex:1 1 calc(50% - 5px)}',
+            '#btn-search,#btn-clear-all{flex:0 0 auto}',
+            '#btn-save-engine,#btn-retranslate-gemma,#btn-retranslate-gemma-retry{flex:1 1 100%}',
+            // ô nhập / chọn: tràn hết bề ngang, chữ 16px để Android không tự zoom
+            '.select-box,.search-box{flex:1 1 100% !important;width:100% !important;max-width:none !important;min-width:0 !important;box-sizing:border-box !important;min-height:48px;padding:12px 14px !important;border-radius:12px !important;font-size:16px !important}',
+            '#search-input,#sort-select{flex:1 1 0 !important;width:auto !important}',
+            // khối chọn công cụ dịch
+            '.toolbar[style*="align-items"]{padding:14px !important;border-radius:14px !important;background:#0f1220 !important;border-color:#2a3050 !important}',
+            '.toolbar[style*="align-items"] label{flex:1 1 100%;font-size:14px !important}',
+            // bảng -> danh sách thẻ
+            'table{display:block !important;width:100% !important;margin:0 !important}',
+            'colgroup,thead{display:none !important}',
+            'tbody{display:block !important}',
+            'tbody tr{display:flex !important;flex-wrap:wrap;align-items:center;gap:10px;background:#0f1220 !important;border:1px solid #2a3050;border-radius:14px;padding:14px;margin:0 0 12px !important}',
+            'tbody tr:hover{background:#0f1220 !important}',
+            'tbody td{display:block;width:auto !important;border:0 !important;padding:0 !important;font-size:15px !important;min-width:0}',
+            'td:nth-child(1){order:1;max-width:62%}',
+            'td:nth-child(2){order:2}',
+            'td:nth-child(5){order:3;margin-left:auto}',
+            'td:nth-child(3){order:4;flex:1 1 100%;margin-top:4px;line-height:1.5;font-weight:400}',
+            'td:nth-child(3) strong{font-weight:500}',
+            'td:nth-child(4){order:5;flex:1 1 100%}',
+            'td:nth-child(6){order:6;flex:1 1 100%}',
+            'td:nth-child(3)::before,td:nth-child(4)::before{display:block;margin-bottom:6px;font-size:11px;font-weight:700;letter-spacing:.8px;color:#8b93b8}',
+            'td:nth-child(3)::before{content:"GỐC"}',
+            'td:nth-child(4)::before{content:"BẢN DỊCH"}',
+            '.chap-badge{font-size:12px !important;padding:5px 10px !important;border-radius:8px !important}',
+            '.speaker-badge{font-size:13px !important;padding:5px 12px !important}',
+            '.time-cell{font-size:12px !important}',
+            '.input-edit{min-height:84px !important;padding:12px !important;border-radius:10px !important;font-size:16px !important;line-height:1.5 !important}',
+            '.actions{gap:10px !important;width:100%}',
+            '.actions .btn{flex:1;padding:12px 10px !important}',
+            '.status-bar{flex-wrap:wrap;gap:6px 16px;font-size:13px !important}',
+            'button:active{transform:scale(.98);filter:brightness(1.12)}'
         ].join('');
         document.head.appendChild(big);
 
