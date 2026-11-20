@@ -1,7 +1,7 @@
 name: Release APK
 
 # Chạy tay (Actions -> Release APK -> Run workflow) để phát hành bản chính thức vào tag `apk-release`:
-#   CraveSagaX_VN.apk, version.json (thông tin phiên bản) và changelog.md (nội dung cập nhật).
+#   CraveSagaX_VN.apk, CraveSagaX_VN_crx.zip (extension Chrome PC), version.json (thông tin phiên bản) và changelog.md (nội dung cập nhật).
 # App đọc version.json này để báo có bản mới và hiện changelog.md.
 on:
   workflow_dispatch:
@@ -59,6 +59,19 @@ jobs:
       - name: Build release APK
         run: gradle :app:assembleRelease --no-daemon
 
+      - name: Đóng gói extension Chrome PC (crx.zip)
+        run: |
+          set -euo pipefail
+          A=app/src/main/assets
+          mkdir -p crx_build
+          cp -r "$A"/ext/. crx_build/
+          cp "$A"/inject/content.js "$A"/inject/injected.js "$A"/inject/get-api-key.js "$A"/inject/get-api-key-bridge.js crx_build/
+          cp -r extension/. crx_build/            # manifest.json, background.js, offscreen.html/js ghi đè lên
+          jq --arg v "$VERSION_NAME" '.version = $v' crx_build/manifest.json > crx_build/manifest.tmp
+          mv crx_build/manifest.tmp crx_build/manifest.json
+          mkdir -p out
+          (cd crx_build && zip -qr "$GITHUB_WORKSPACE/out/CraveSagaX_VN_crx.zip" .)
+
       - name: Tạo APK, version.json, changelog.md
         env:
           CHANGELOG_INPUT: ${{ inputs.changelog }}
@@ -87,8 +100,9 @@ jobs:
             --argjson apkSize "$(stat -c%s out/CraveSagaX_VN.apk)" \
             --arg sha256 "$(sha256sum out/CraveSagaX_VN.apk | cut -d' ' -f1)" \
             --arg changelogUrl "$BASE/changelog.md" \
+            --arg crxUrl "$BASE/CraveSagaX_VN_crx.zip" \
             '{versionCode:$versionCode, versionName:$versionName, commit:$commit, shortCommit:$shortCommit,
-              buildDate:$buildDate, apkUrl:$apkUrl, apkSize:$apkSize, sha256:$sha256, changelogUrl:$changelogUrl}' \
+              buildDate:$buildDate, apkUrl:$apkUrl, apkSize:$apkSize, sha256:$sha256, changelogUrl:$changelogUrl, crxUrl:$crxUrl}' \
             > out/version.json
           cat out/version.json
 
@@ -103,7 +117,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete apk-release --yes --cleanup-tag || echo "Chưa có release 'apk-release', bỏ qua."
-          gh release create apk-release out/CraveSagaX_VN.apk out/version.json out/changelog.md \
+          gh release create apk-release out/CraveSagaX_VN.apk out/CraveSagaX_VN_crx.zip out/version.json out/changelog.md \
             --target "$GITHUB_SHA" \
             --title "CraveSagaX VN $VERSION_NAME" \
             --notes "Build từ commit $SHORT_SHA" \

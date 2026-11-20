@@ -18,3 +18,8 @@ Crave Saga X Tiếng Việt Cho Android
 
 Yêu cầu máy: Android 7.0+ và Android System WebView / Chrome bản mới (cần WebMessageListener).
 
+## Extension Chrome (PC)
+
+CI đóng gói thêm `CraveSagaX_VN_crx.zip` và đẩy lên cả `apk-latest` lẫn `apk-release`.
+Cách cài: giải nén → mở `chrome://extensions` → bật **Developer mode** → **Load unpacked** → chọn thư mục vừa giải nén.
+

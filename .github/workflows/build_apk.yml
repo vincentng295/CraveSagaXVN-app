@@ -45,7 +45,9 @@ jobs:
 
       - name: Tính phiên bản
         run: |
-          echo "VERSION_CODE=$(git rev-list --count HEAD)" >> "$GITHUB_ENV"
+          CODE="$(git rev-list --count HEAD)"
+          echo "VERSION_CODE=$CODE" >> "$GITHUB_ENV"
+          echo "VERSION_NAME=1.10.$CODE" >> "$GITHUB_ENV"
           echo "SHORT_SHA=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_ENV"
 
       - name: Build release APK
@@ -54,11 +56,26 @@ jobs:
       - name: Đổi tên APK
         run: cp app/build/outputs/apk/release/app-release.apk CraveSagaX_VN.apk
 
+      - name: Đóng gói extension Chrome PC (crx.zip)
+        run: |
+          set -euo pipefail
+          A=app/src/main/assets
+          mkdir -p crx_build
+          cp -r "$A"/ext/. crx_build/
+          cp "$A"/inject/content.js "$A"/inject/injected.js "$A"/inject/get-api-key.js "$A"/inject/get-api-key-bridge.js crx_build/
+          cp -r extension/. crx_build/            # manifest.json, background.js, offscreen.html/js ghi đè lên
+          jq --arg v "$VERSION_NAME" '.version = $v' crx_build/manifest.json > crx_build/manifest.tmp
+          mv crx_build/manifest.tmp crx_build/manifest.json
+          mkdir -p out
+          (cd crx_build && zip -qr "$GITHUB_WORKSPACE/out/CraveSagaX_VN_crx.zip" .)
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: CraveSagaX_VN-apk
-          path: CraveSagaX_VN.apk
+          path: |
+            CraveSagaX_VN.apk
+            out/CraveSagaX_VN_crx.zip
 
       - name: Remove old 'apk-latest' release (nếu có)
         env:
@@ -73,6 +90,8 @@ jobs:
           prerelease: true
           body: |
             Build từ commit ${{ env.SHORT_SHA }}
-          files: CraveSagaX_VN.apk
+          files: |
+            CraveSagaX_VN.apk
+            out/CraveSagaX_VN_crx.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
