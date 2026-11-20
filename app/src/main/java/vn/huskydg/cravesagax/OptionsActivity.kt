@@ -24,6 +24,7 @@ class OptionsActivity : AppCompatActivity() {
             return
         }
         ExtensionHub.init(applicationContext)
+        Notifier.requestPermissionIfNeeded(this) // thông báo tiến độ / kết quả dịch nền
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
         webView = WebView(this)

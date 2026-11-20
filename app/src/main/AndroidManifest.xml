@@ -6,6 +6,12 @@
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- Thông báo "đang dịch" / lỗi dịch (Android 13+ cần xin quyền lúc chạy) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Dịch từ điển bằng Gemma chạy nền (foreground service) kể cả khi thoát/đóng app -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- Hỏi người dùng cho app bỏ qua tối ưu hóa pin để việc dịch nền không bị hệ thống ngắt -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application
         android:allowBackup="true"
@@ -44,6 +50,11 @@
             android:name=".OptionsActivity"
             android:exported="false"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|keyboard|uiMode|density" />
+        <service
+            android:name=".GemmaService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

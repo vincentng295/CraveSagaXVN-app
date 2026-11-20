@@ -32,6 +32,7 @@ object Notifier {
     private const val ID_PROGRESS = 2001
     private const val ID_RESULT = 2002
     private const val ID_QUEUE = 2003
+    const val ID_JOB = 2004 // thông báo foreground service dịch từ điển (GemmaService)
     private const val REQ_PERMISSION = 7001
 
     private val main = Handler(Looper.getMainLooper())
@@ -50,7 +51,7 @@ object Notifier {
         return NotificationManagerCompat.from(ctx).areNotificationsEnabled()
     }
 
-    private fun ensureChannels(ctx: Context) {
+    internal fun ensureChannels(ctx: Context) {
         if (Build.VERSION.SDK_INT < 26) return
         val nm = ctx.getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(
@@ -68,7 +69,50 @@ object Notifier {
         return PendingIntent.getActivity(ctx, 0, i, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
     }
 
-    fun show(ctx: Context, kind: String, text: String) {
+    private fun openOptionsIntent(ctx: Context): PendingIntent {
+        val i = Intent(ctx, OptionsActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        return PendingIntent.getActivity(ctx, 1, i, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+    }
+
+    /**
+     * Thông báo cố định của foreground service dịch từ điển. [total] <= 0 -> thanh chạy vô định.
+     * Chạm vào = mở Quản lý từ điển; nút "Dừng" gọi [GemmaService] hủy lượt dịch.
+     */
+    fun jobNotification(ctx: Context, text: String, done: Int, total: Int): android.app.Notification {
+        ensureChannels(ctx)
+        val stop = PendingIntent.getService(
+            ctx, 2,
+            Intent(ctx, GemmaService::class.java).setAction(GemmaService.ACTION_STOP),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        val b = NotificationCompat.Builder(ctx, CH_PROGRESS)
+            .setSmallIcon(android.R.drawable.stat_notify_sync)
+            .setContentTitle("Dịch từ điển bằng Gemma")
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setCategory(NotificationCompat.CATEGORY_PROGRESS)
+            .setContentIntent(openOptionsIntent(ctx))
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Dừng", stop)
+        if (total > 0) b.setProgress(total, done.coerceIn(0, total), false) else b.setProgress(0, 0, true)
+        return b.build()
+    }
+
+    /** Cập nhật thông báo foreground (không làm gì nếu chưa được cấp quyền thông báo). */
+    fun updateJob(ctx: Context, text: String, done: Int, total: Int) {
+        if (!canNotify(ctx)) return
+        try { NotificationManagerCompat.from(ctx).notify(ID_JOB, jobNotification(ctx, text, done, total)) }
+        catch (_: SecurityException) {}
+    }
+
+    /**
+     * @param openOptions chạm vào thông báo thì mở Quản lý từ điển thay vì màn hình game.
+     * @param persistent  không tự biến mất (kết quả dịch nền: người dùng có thể không nhìn máy lúc xong).
+     */
+    fun show(ctx: Context, kind: String, text: String, openOptions: Boolean = false, persistent: Boolean = false) {
         main.post {
             val nm = NotificationManagerCompat.from(ctx)
             if (kind == "clear") {
@@ -133,8 +177,8 @@ object Notifier {
                         .setAutoCancel(true)
                         .setPriority(NotificationCompat.PRIORITY_HIGH)
                         .setCategory(if (isError) NotificationCompat.CATEGORY_ERROR else NotificationCompat.CATEGORY_STATUS)
-                        .setContentIntent(openGameIntent(ctx))
-                        .setTimeoutAfter(10_000L)
+                        .setContentIntent(if (openOptions) openOptionsIntent(ctx) else openGameIntent(ctx))
+                        .apply { if (!persistent) setTimeoutAfter(10_000L) }
                         .build()
                     try { nm.notify(ID_RESULT, n) } catch (_: SecurityException) {}
                 }

@@ -313,6 +313,8 @@ function __createCraveChrome(opts) {
         // phần mở rộng riêng của app
         __fetch: smartFetch,
         __app: function (action) { send({ t: 'app', action: action }); },
+        // Gửi message thô tới native (vd: dịch Gemma chạy nền: gemma_start / gemma_cancel / gemma_status).
+        __native: function (obj) { send(obj); },
         __notify: function (kind, text) { send({ t: 'notify', kind: String(kind || ''), text: String(text || '') }); }
     };
 }

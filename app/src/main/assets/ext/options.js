@@ -42,6 +42,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnRetranslateGemma = document.getElementById('btn-retranslate-gemma');
     const gemmaRetranslateStatus = document.getElementById('gemma-retranslate-status');
     const btnRetranslateGemmaRetry = document.getElementById('btn-retranslate-gemma-retry');
+    const btnGemmaCancel = document.getElementById('btn-gemma-cancel');
 
 
     // ==== Dịch lại bằng Gemma (theo Chap đang filter) ====
@@ -648,12 +649,98 @@ document.addEventListener('DOMContentLoaded', () => {
         btnRetranslateGemmaRetry.style.display = '';
     }
 
+
+    // ==== Dịch Gemma chạy nền (app Android) ====
+    // Trong app Android, việc dịch chạy ở foreground service phía native (GemmaService) nên vẫn tiếp
+    // tục khi thoát trang này / thoát game / đóng app; tiến độ hiện ở thông báo hệ thống.
+    // Trang này chỉ gửi lệnh và hiển thị lại tiến độ nhận về. Bản extension Chrome (PC) không có
+    // chrome.__native nên vẫn dịch trực tiếp ngay trong trang như cũ.
+    const useNativeGemma = typeof chrome.__native === 'function';
+    let sawNativeGemmaRunning = false; // chỉ báo kết quả cho lượt dịch mà trang này đã thấy chạy
+
+    function setNativeGemmaBusy(busy, text) {
+        if (!btnRetranslateGemma) return;
+        btnRetranslateGemma.disabled = busy;
+        if (btnRetranslateGemmaRetry) btnRetranslateGemmaRetry.disabled = busy;
+        if (btnGemmaCancel) btnGemmaCancel.style.display = busy ? '' : 'none';
+        gemmaRetranslateStatus.style.display = busy ? 'block' : 'none';
+        gemmaRetranslateStatus.innerText = busy
+            ? `${text || 'Đang dịch...'}\n(Việc dịch chạy nền: vẫn tiếp tục khi bạn thoát trang hoặc đóng app, xem tiến độ ở thanh thông báo.)`
+            : '';
+        if (busy) hideGemmaRetryButton();
+    }
+
+    function startNativeGemma(items, apiKey, chapLabel) {
+        sawNativeGemmaRunning = true;
+        setNativeGemmaBusy(true, `Đang gửi ${items.length} câu tới Gemma...`);
+        chrome.__native({
+            t: 'gemma_start',
+            apiKey,
+            model: GEMINI_MODEL_ID,
+            instruction: GEMINI_SYSTEM_INSTRUCTION,
+            chapLabel: chapLabel || '',
+            items: items.map((it) => ({ key: it.key, text: it.text, speaker: it.speaker || null }))
+        });
+    }
+
+    function applyNativeGemmaProgress(m) {
+        // Bản dịch mới đã được native ghi vào storage; chỉ cập nhật bản sao trong trang để hiển thị.
+        let updated = false;
+        if (m.updates) {
+            Object.keys(m.updates).forEach((key) => {
+                updateEntryTranslation(key, m.updates[key]);
+                updated = true;
+            });
+        }
+
+        if (m.state === 'running' || m.state === 'retry') {
+            sawNativeGemmaRunning = true;
+            setNativeGemmaBusy(true, m.text);
+        } else {
+            const wasRunning = sawNativeGemmaRunning;
+            sawNativeGemmaRunning = false;
+            setNativeGemmaBusy(false);
+
+            if ((m.state === 'error' || m.state === 'cancelled') && Array.isArray(m.remainingKeys) && m.remainingKeys.length) {
+                const remainingItems = m.remainingKeys.map((key) => ({
+                    key,
+                    text: key,
+                    speaker: getEntryName(translationDict[key])
+                }));
+                showGemmaRetryButton(remainingItems);
+            }
+            if (wasRunning && m.text && document.visibilityState === 'visible') {
+                alert(m.text);
+            }
+        }
+        if (updated) renderTable();
+    }
+
+    if (useNativeGemma) {
+        chrome.runtime.onMessage.addListener((msg) => {
+            if (msg && msg.type === 'GEMMA_PROGRESS') applyNativeGemmaProgress(msg);
+        });
+        if (btnGemmaCancel) {
+            btnGemmaCancel.addEventListener('click', () => {
+                if (confirm('Dừng việc dịch Gemma đang chạy nền? Các câu đã dịch vẫn được giữ lại.')) {
+                    chrome.__native({ t: 'gemma_cancel' });
+                }
+            });
+        }
+        // Mở lại trang giữa chừng: hỏi native lượt dịch đang chạy (nếu có) để hiện lại tiến độ.
+        chrome.__native({ t: 'gemma_status' });
+    }
+
     // Chạy dịch Gemma cho 1 danh sách "items" đã chuẩn bị sẵn (key/text/speaker),
     // lưu tiến trình dần dần sau mỗi chunk dịch xong, và nếu thất bại giữa chừng
     // (hết quota sau khi retry hết số lần cho phép) thì KHÔNG hủy bỏ những câu đã
     // dịch được — vẫn giữ nguyên bản dịch đã lưu, đồng thời hiện nút để dịch tiếp
     // phần còn lại thay vì phải dịch lại từ đầu.
     async function runGemmaTranslation(items, apiKey, chapLabel) {
+        if (useNativeGemma) {
+            startNativeGemma(items, apiKey, chapLabel);
+            return;
+        }
         const originalLabel = btnRetranslateGemma.innerText;
         btnRetranslateGemma.disabled = true;
         if (btnRetranslateGemmaRetry) btnRetranslateGemmaRetry.disabled = true;

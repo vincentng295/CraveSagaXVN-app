@@ -135,12 +135,52 @@ object ExtensionHub {
             "open" -> openUrl(m.optString("url"))
             "app" -> handleAppAction(m.optString("action"))
             "notify" -> Notifier.show(appContext, m.optString("kind"), m.optString("text"))
+            "gemma_start" -> startGemmaJob(m)
+            "gemma_cancel" -> GemmaJob.cancel(null)
+            "gemma_status" -> GemmaJob.pushStatus()
             "fbegin" -> fileBegin(m.getInt("id"), m.optString("name"), m.optString("mime"))
             "fchunk" -> fileChunk(m.getInt("id"), m.getString("d"))
             "fend" -> fileEnd(m.getInt("id"))
             "fetch" -> startFetch(m, proxy)
             "fcancel" -> connections.remove(m.optInt("id"))?.disconnect()
         }
+    }
+
+    // ------------------------------------------------------------------ dịch Gemma chạy nền
+
+    private fun startGemmaJob(m: JSONObject) {
+        val arr = m.optJSONArray("items") ?: return
+        val items = ArrayList<GemmaJob.Item>(arr.length())
+        for (i in 0 until arr.length()) {
+            val o = arr.optJSONObject(i) ?: continue
+            val text = o.optString("text")
+            if (text.isEmpty()) continue
+            items.add(GemmaJob.Item(o.optString("key", text), text, if (o.isNull("speaker")) null else o.optString("speaker")))
+        }
+        val apiKey = m.optString("apiKey")
+        if (apiKey.isBlank()) return
+        GemmaJob.start(
+            appContext, apiKey, m.optString("model"), m.optString("instruction"),
+            items, m.optString("chapLabel")
+        )
+    }
+
+    /** Gửi 1 message tới các trang menu/Options đang mở (chrome.runtime.onMessage phía JS). */
+    fun sendToPanels(json: String) {
+        if (!started) return
+        broadcast("{\"t\":\"msg\",\"msg\":$json}", Kind.PANEL)
+    }
+
+    /**
+     * Đọc-sửa-ghi nguyên tử 1 key storage trên luồng io rồi phát storage.onChanged.
+     * [transform] nhận JSON hiện tại (null nếu chưa có), trả JSON mới (null = không đổi). Chặn tới khi xong.
+     */
+    fun mutateStorage(key: String, transform: (String?) -> String?) {
+        val f = storage.io.submit(Runnable {
+            val next = transform(storage.get(listOf(key))[key])
+            if (next != null) announce(storage.set(mapOf(key to next)))
+        })
+        try { f.get() } catch (e: java.util.concurrent.ExecutionException) { throw (e.cause ?: e) }
     }
 
     // ------------------------------------------------------------------ storage

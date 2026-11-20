@@ -4,7 +4,10 @@ import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.net.Uri
 import android.os.Bundle
+import android.os.PowerManager
+import android.provider.Settings
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
@@ -12,6 +15,7 @@ import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
@@ -19,6 +23,8 @@ import androidx.core.view.WindowInsetsCompat
 
 /** Màn hình đầu tiên: chọn phiên bản game. */
 class MainActivity : AppCompatActivity() {
+
+    private lateinit var batteryButton: TextView
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density + 0.5f).toInt()
 
@@ -53,6 +59,22 @@ class MainActivity : AppCompatActivity() {
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
         ).apply { topMargin = dp(14) })
 
+        batteryButton = text("", 14f, Color.WHITE).apply {
+            gravity = Gravity.CENTER
+            setPadding(dp(16), dp(12), dp(16), dp(12))
+            setOnClickListener { requestIgnoreBatteryOptimizations() }
+        }
+        column.addView(batteryButton, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ).apply { topMargin = dp(10) })
+        column.addView(
+            text("Nên bật nếu dịch từ điển bằng Gemma lâu: giúp Android không ngắt việc dịch chạy nền khi bạn thoát hoặc đóng app.", 11f, 0xFF7C819A.toInt()).apply {
+                gravity = Gravity.CENTER
+                setPadding(dp(8), dp(6), dp(8), 0)
+            }
+        )
+        refreshBatteryButton()
+
         column.addView(
             text("Việt hóa tự động hội thoại • mã nguồn mở, miễn phí • v${Updater.current(this).name}", 11f, 0xFF7C819A.toInt()).apply {
                 gravity = Gravity.CENTER
@@ -79,6 +101,35 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         ExtensionHub.host = this
+        refreshBatteryButton() // người dùng có thể vừa cấp/thu hồi quyền ở màn hình hệ thống
+    }
+
+    private fun isIgnoringBatteryOptimizations(): Boolean =
+        getSystemService(PowerManager::class.java)?.isIgnoringBatteryOptimizations(packageName) == true
+
+    private fun refreshBatteryButton() {
+        val ok = isIgnoringBatteryOptimizations()
+        batteryButton.text = if (ok) "✅ Đã bỏ qua tối ưu hóa pin" else "🔋 Bỏ qua tối ưu hóa pin (chạy nền ổn định)"
+        batteryButton.background = rounded(if (ok) 0xFF166534.toInt() else 0xFF374151.toInt(), 10)
+    }
+
+    /** Hiện hộp thoại hệ thống xin loại app khỏi danh sách tối ưu hóa pin; máy không hỗ trợ thì mở trang cài đặt chung. */
+    private fun requestIgnoreBatteryOptimizations() {
+        if (isIgnoringBatteryOptimizations()) {
+            Toast.makeText(this, "App đã được bỏ qua tối ưu hóa pin", Toast.LENGTH_SHORT).show()
+            return
+        }
+        try {
+            startActivity(
+                Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName"))
+            )
+        } catch (e: Exception) {
+            try {
+                startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+            } catch (e2: Exception) {
+                Toast.makeText(this, "Máy không mở được cài đặt tối ưu hóa pin", Toast.LENGTH_LONG).show()
+            }
+        }
     }
 
     override fun onPause() {
